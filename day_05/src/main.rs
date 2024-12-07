@@ -5,7 +5,7 @@ struct Condition {
 
 type Conditions = Vec<Condition>;
 
-fn valid_order(order: &[u32], conditions: &Conditions) -> bool {
+fn is_valid_order(order: &[u32], conditions: &Conditions) -> bool {
     for index in 0..order.len() {
         let remaining = &order[index..];
         let page = order[index];
@@ -20,6 +20,26 @@ fn valid_order(order: &[u32], conditions: &Conditions) -> bool {
         }
     }
     true
+}
+
+fn sum_middle_pages(orders: &[Vec<u32>]) -> u32 {
+    orders.iter().map(|order| order[order.len() / 2]).sum()
+}
+
+fn fix_order(order: &[u32], conditions: &Conditions) -> Vec<u32> {
+    let mut new_order = Vec::new();
+
+    for page in order {
+        let index_to_insert = conditions
+            .iter()
+            .filter(|condition| condition.after == *page)
+            .filter_map(|condition| new_order.iter().position(|x| *x == condition.before))
+            .min()
+            .unwrap_or(new_order.len());
+
+        new_order.insert(index_to_insert, *page);
+    }
+    new_order
 }
 
 fn main() {
@@ -43,10 +63,27 @@ fn main() {
         })
         .collect::<Vec<_>>();
 
-    let sum = pages
+    let (valid_orders, invalid_orders): (Vec<_>, Vec<_>) = pages
         .iter()
-        .filter(|order| valid_order(order, &conditions))
-        .map(|pages| pages[pages.len() / 2])
-        .sum::<u32>();
-    println!("The requested sum is {}.", sum);
+        .partition(|order| is_valid_order(order, &conditions));
+    let x = valid_orders
+        .iter()
+        .map(|order| order.to_owned().clone())
+        .collect::<Vec<_>>();
+
+    let sum = sum_middle_pages(&x);
+    println!(
+        "The sum of the middle pages of the valid orders is {}.",
+        sum
+    );
+
+    let fixed_orders = invalid_orders
+        .iter()
+        .map(|order| fix_order(order, &conditions))
+        .collect::<Vec<_>>();
+    let sum = sum_middle_pages(&fixed_orders);
+    println!(
+        "The sum of the middle pages of the invalid orders is {}.",
+        sum
+    );
 }
