@@ -44,7 +44,7 @@ impl FromStr for Map {
     }
 }
 
-fn antinods(positions: &[(i32, i32)]) -> Vec<(i32, i32)> {
+fn antinodes(positions: &[(i32, i32)]) -> Vec<(i32, i32)> {
     let pairs = positions.iter().flat_map(|a| {
         positions
             .iter()
@@ -64,18 +64,50 @@ fn antinods(positions: &[(i32, i32)]) -> Vec<(i32, i32)> {
     antinodes
 }
 
+fn harmonic_antinodes(positions: &[(i32, i32)]) -> Vec<((i32, i32), (i32, i32))> {
+    let pairs = positions.iter().flat_map(|a| {
+        positions
+            .iter()
+            .filter(move |b| a != *b)
+            .map(move |b| (a, b))
+    });
+    let harmonic_antinodes = pairs
+        .map(|((x1, y1), (x2, y2))| {
+            let o_x = x2 - x1;
+            let o_y = y2 - y1;
+            ((*x1, *y1), (o_x, o_y))
+        })
+        .collect::<Vec<_>>();
+    harmonic_antinodes
+}
+
 fn main() {
     let input = include_str!("../input/input.txt");
     let map = Map::from_str(&input).unwrap();
 
     let unique_antinodes = map
         .antennas
-        .iter()
-        .flat_map(|(_, positions)| antinods(positions))
+        .values()
+        .flat_map(|positions| antinodes(positions))
         .filter(|(x, y)| (0..map.width).contains(x) && (0..map.height).contains(y))
         .collect::<HashSet<_>>();
     println!(
         "There are {} unique locations containing an antinode.",
         unique_antinodes.len()
+    );
+
+    let n = map.width.max(map.height);
+    let unique_harmonic_antinodes = map
+        .antennas
+        .values()
+        .flat_map(|positions| harmonic_antinodes(positions))
+        .flat_map(|(start, offset)| {
+            (-n..=n).map(move |i| (start.0 + i * offset.0, start.1 + i * offset.1))
+        })
+        .filter(|(x, y)| (0..map.width).contains(x) && (0..map.height).contains(y))
+        .collect::<HashSet<_>>();
+    println!(
+        "There are {} unique locations containing an antinode.",
+        unique_harmonic_antinodes.len()
     );
 }
