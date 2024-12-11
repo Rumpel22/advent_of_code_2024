@@ -1,7 +1,5 @@
 use std::collections::HashSet;
 
-use rayon::prelude::*;
-
 struct Map {
     data: &'static str,
     height: i32,
