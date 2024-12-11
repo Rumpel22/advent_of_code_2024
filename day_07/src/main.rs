@@ -4,50 +4,20 @@ struct Equation {
     numbers: Vec<i64>,
 }
 
-enum Operator {
-    Plus,
-    Mult,
-}
-
-fn possible_equation(result: i64, numbers: &[i64]) -> Option<Vec<Operator>> {
+fn possible_equation(result: i64, numbers: &[i64]) -> bool {
     if numbers.len() == 1 {
-        return match result == numbers[0] {
-            true => Some(vec![]),
-            false => None,
-        };
+        return result == numbers[0];
     }
 
     let last = numbers.last().unwrap();
     let rest = &numbers[..numbers.len() - 1];
 
-    if let Some(mut symbols) = possible_equation(result - last, rest) {
-        symbols.push(Operator::Plus);
-        Some(symbols)
-    } else if let Some(mut symbols) = possible_equation(result / last, rest) {
-        if result % last == 0 {
-            symbols.push(Operator::Mult);
-            Some(symbols)
-        } else {
-            None
-        }
-    } else {
-        None
-    }
+    possible_equation(result - last, rest)
+        || (result % last == 0 && possible_equation(result / last, rest))
 }
 
 fn possible(equation: &&Equation) -> bool {
-    if let Some(operations) = possible_equation(equation.result, &equation.numbers) {
-        let x = equation.numbers.iter().skip(1).zip(operations.iter()).fold(
-            equation.numbers[0],
-            |result, (number, operator)| match operator {
-                Operator::Mult => result * number,
-                Operator::Plus => result + number,
-            },
-        );
-        assert!(x == equation.result);
-        return true;
-    }
-    false
+    possible_equation(equation.result, &equation.numbers)
 }
 fn main() {
     let input = include_str!("../input/input.txt");
