@@ -2,7 +2,6 @@ use std::{collections::HashSet, str::FromStr};
 
 struct Map {
     data: Vec<u8>,
-    height: usize,
     width: usize,
 }
 
@@ -42,12 +41,7 @@ impl FromStr for Map {
             .filter_map(|c| c.to_digit(10).and_then(|c| Some(c as u8)))
             .collect::<Vec<_>>();
         let width = input.find('\n').unwrap();
-        let height = data.len() / width;
-        Ok(Self {
-            data,
-            width,
-            height,
-        })
+        Ok(Self { data, width })
     }
 }
 
@@ -138,10 +132,14 @@ impl Map {
 fn main() {
     let input = include_str!("../input/input.txt");
     let map = Map::from_str(&input).unwrap();
-    let scores = map
+    let paths = map
         .iter()
         .filter(|(_, v)| *v == 0)
         .filter_map(|(coordinates, v)| map.find_paths(&coordinates, v))
+        .collect::<Vec<_>>();
+
+    let scores = paths
+        .iter()
         .map(|paths| {
             let x = paths.iter().map(|path| path[0]).collect::<HashSet<_>>();
             x.len()
@@ -151,5 +149,8 @@ fn main() {
     println!(
         "The sum of the scores of all trailheads on the map is {}.",
         scores
-    )
+    );
+
+    let ratings = paths.iter().map(|path| path.len()).sum::<usize>();
+    println!("The sum of the ratings is {}.", ratings);
 }
