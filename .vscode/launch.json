@@ -7,15 +7,15 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug executable 'day_11'",
+            "name": "Debug executable 'day_12'",
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=day_11",
-                    "--package=day_11"
+                    "--bin=day_12",
+                    "--package=day_12"
                 ],
                 "filter": {
-                    "name": "day_11",
+                    "name": "day_12",
                     "kind": "bin"
                 }
             },
@@ -25,16 +25,16 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in executable 'day_11'",
+            "name": "Debug unit tests in executable 'day_12'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
-                    "--bin=day_11",
-                    "--package=day_11"
+                    "--bin=day_12",
+                    "--package=day_12"
                 ],
                 "filter": {
-                    "name": "day_11",
+                    "name": "day_12",
                     "kind": "bin"
                 }
             },
