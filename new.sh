@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 
+if [ "$#" -ne 1 ]; then
+    echo "No number given"
+    exit
+fi
+
 today=$(printf %02d $1)
 cargo new day_$today
 
