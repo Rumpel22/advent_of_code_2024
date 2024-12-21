@@ -1,4 +1,4 @@
-use std::{collections::HashMap, str::FromStr, vec};
+use std::{collections::HashMap, str::FromStr};
 
 #[derive(Eq, PartialEq, Hash, Clone, Copy)]
 struct Coordinates {
@@ -131,6 +131,9 @@ trait Area {
 trait Perimeter {
     fn perimeter(&self) -> usize;
 }
+trait Sides {
+    fn sides(&self) -> usize;
+}
 impl Area for Region {
     fn area(&self) -> usize {
         self.len()
@@ -160,6 +163,98 @@ impl Perimeter for Region {
     }
 }
 
+impl Sides for Region {
+    fn sides(&self) -> usize {
+        let max_x = self
+            .iter()
+            .max_by_key(|coordinates| coordinates.x)
+            .unwrap()
+            .x;
+        let min_x = self
+            .iter()
+            .min_by_key(|coordinates| coordinates.x)
+            .unwrap()
+            .x;
+        let max_y = self
+            .iter()
+            .max_by_key(|coordinates| coordinates.y)
+            .unwrap()
+            .y;
+        let min_y = self
+            .iter()
+            .min_by_key(|coordinates| coordinates.y)
+            .unwrap()
+            .y;
+
+        let mut left_sides = 0;
+        let mut right_sides = 0;
+        for x in min_x..=max_x {
+            let mut on_left_side = false;
+            let mut on_right_side = false;
+            let mut c = Coordinates { x, y: min_y };
+            while c.y <= max_y {
+                if self.contains(&c) {
+                    if self.contains(&c.left()) {
+                        on_left_side = false;
+                    } else {
+                        if !on_left_side {
+                            left_sides += 1;
+                            on_left_side = true;
+                        }
+                    }
+                    if self.contains(&c.right()) {
+                        on_right_side = false;
+                    } else {
+                        if !on_right_side {
+                            right_sides += 1;
+                            on_right_side = true;
+                        }
+                    }
+                } else {
+                    on_left_side = false;
+                    on_right_side = false;
+                }
+
+                c = c.down();
+            }
+        }
+        let mut up_sides = 0;
+        let mut down_sides = 0;
+        for y in min_y..=max_y {
+            let mut on_up_side = false;
+            let mut on_down_side = false;
+            let mut c = Coordinates { x: min_x, y };
+            while c.x <= max_x {
+                if self.contains(&c) {
+                    if self.contains(&c.up()) {
+                        on_up_side = false;
+                    } else {
+                        if !on_up_side {
+                            up_sides += 1;
+                            on_up_side = true;
+                        }
+                    }
+                    if self.contains(&c.down()) {
+                        on_down_side = false;
+                    } else {
+                        if !on_down_side {
+                            down_sides += 1;
+                            on_down_side = true;
+                        }
+                    }
+                } else {
+                    on_up_side = false;
+                    on_down_side = false;
+                }
+
+                c = c.right();
+            }
+        }
+
+        up_sides + down_sides + left_sides + right_sides
+    }
+}
+
 fn main() {
     let input = include_str!("../input/input.txt");
     let map = Map::from_str(input).unwrap();
@@ -173,5 +268,18 @@ fn main() {
         .iter()
         .map(|region| region.area() * region.perimeter())
         .sum::<usize>();
-    println!("The total price of fencing all regions is {}.", price)
+    println!("The total price of fencing all regions is {}.", price);
+
+    let price = regions
+        .iter()
+        .map(|region| {
+            let area = region.area();
+            let sides = region.sides();
+            area * sides
+        })
+        .sum::<usize>();
+    println!(
+        "The price of fencing all regions by there sides is {}.",
+        price
+    );
 }
