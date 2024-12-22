@@ -6,6 +6,7 @@ use std::{
 #[derive(Clone, Copy, PartialEq)]
 enum Tile {
     Wall,
+    WideBox(bool),
     Box,
     Space,
     Robot,
@@ -16,26 +17,14 @@ struct Map {
     tiles: Vec<Tile>,
     height: usize,
     width: usize,
-    robot: XY,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 enum Move {
     Up,
     Down,
     Left,
     Right,
-}
-
-impl Move {
-    fn rev(&self) -> Self {
-        match self {
-            Move::Up => Move::Down,
-            Move::Down => Move::Up,
-            Move::Left => Move::Right,
-            Move::Right => Move::Left,
-        }
-    }
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -45,12 +34,6 @@ struct XY {
 }
 
 impl XY {
-    fn iter(&self, direction: Move) -> XYIterator {
-        XYIterator {
-            next: Some(*self),
-            direction,
-        }
-    }
     fn next(&self, direction: Move) -> Self {
         match direction {
             Move::Up => XY {
@@ -71,58 +54,76 @@ impl XY {
             },
         }
     }
-    fn distance(&self, other: &Self) -> usize {
-        self.x.abs_diff(other.x) + self.y.abs_diff(other.y)
-    }
-}
-
-struct XYIterator {
-    next: Option<XY>,
-    direction: Move,
-}
-
-impl Iterator for XYIterator {
-    type Item = XY;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let next = self.next?.next(self.direction);
-        let current = self.next;
-        self.next = Some(next);
-        current
-    }
 }
 
 impl Map {
     fn move_robot(&self, direction: &Move) -> Self {
-        let stop = self
-            .robot
-            .iter(*direction)
-            .skip_while(|xy| self[xy] != Tile::Wall && self[xy] != Tile::Space)
-            .next()
-            .unwrap();
-        let steps = stop.distance(&self.robot);
-        let map =
-            stop.iter(direction.rev())
-                .skip(1)
-                .take(steps)
-                .fold(self.clone(), |mut map, xy| {
-                    match map[&xy] {
-                        Tile::Wall => panic!("Should not happen"),
-                        Tile::Space => (),
-                        tile => {
-                            let prev = xy.next(*direction);
-                            if map[&prev] == Tile::Space {
-                                map[&prev] = tile;
-                                map[&xy] = Tile::Space;
-                                if tile == Tile::Robot {
-                                    map.robot = prev;
-                                }
-                            }
-                        }
-                    };
-                    map
-                });
-        map
+        let robot_position = self.robot();
+        self.move_tile(robot_position, direction)
+            .unwrap_or_else(|| self.clone())
+    }
+
+    fn move_tile(&self, xy: XY, direction: &Move) -> Option<Self> {
+        let tile = self[&xy];
+        match tile {
+            Tile::Wall => None,
+            Tile::Space => Some(self.clone()),
+            Tile::WideBox(left_part) => {
+                let (left_xy, right_xy) = if left_part {
+                    (xy, xy.next(Move::Right))
+                } else {
+                    (xy.next(Move::Left), xy)
+                };
+                let (first_xy, second_xy) = if *direction == Move::Left {
+                    (left_xy, right_xy)
+                } else {
+                    (right_xy, left_xy)
+                };
+
+                let new_first = first_xy.next(*direction);
+                let new_second = second_xy.next(*direction);
+
+                if let Some(mut map) = self.move_tile(new_first, direction) {
+                    map[&new_first] = map[&first_xy];
+                    map[&first_xy] = Tile::Space;
+                    if let Some(mut map) = map.move_tile(new_second, direction) {
+                        map[&new_second] = map[&second_xy];
+                        map[&second_xy] = Tile::Space;
+                        return Some(map);
+                    }
+                }
+                return None;
+            }
+            tile => {
+                let new_spot = xy.next(*direction);
+                if let Some(mut map) = self.move_tile(new_spot, direction) {
+                    map[&new_spot] = tile;
+                    map[&xy] = Tile::Space;
+                    Some(map)
+                } else {
+                    None
+                }
+            }
+        }
+    }
+
+    fn sum_of_box_gps(&self) -> usize {
+        self.tiles
+            .iter()
+            .enumerate()
+            .filter_map(|(index, tile)| match tile {
+                Tile::Box => Some((index / self.width * 100) + (index % self.width)),
+                Tile::WideBox(true) => Some((index / self.width * 100) + (index % self.width)),
+                _ => None,
+            })
+            .sum::<usize>()
+    }
+
+    fn robot(&self) -> XY {
+        let robot_index = self.tiles.iter().position(|t| *t == Tile::Robot).unwrap();
+        let x = robot_index % self.width;
+        let y = robot_index / self.width;
+        XY { x, y }
     }
 }
 
@@ -157,16 +158,11 @@ impl FromStr for Map {
 
         let width = s.find('\n').unwrap();
         let height = tiles.len() / width;
-        let robot_index = tiles.iter().position(|t| matches!(t, Tile::Robot)).unwrap();
-        let y = robot_index / width;
-        let x = robot_index % width;
-        let robot = XY { x, y };
 
         Ok(Map {
             tiles,
             height,
             width,
-            robot,
         })
     }
 }
@@ -188,19 +184,37 @@ fn moves(input: &str) -> Vec<Move> {
 fn main() {
     let input = include_str!("../input/input.txt");
     let (map_str, moves_str) = input.split_once("\n\n").unwrap();
-    let map = Map::from_str(map_str).unwrap();
+    let orig_map = Map::from_str(map_str).unwrap();
     let moves = moves(moves_str);
 
-    let map = moves.iter().fold(map, |map, m| map.move_robot(m));
+    let map = moves
+        .iter()
+        .fold(orig_map.clone(), |map, direction| map.move_robot(direction));
 
-    let sum_of_box_gps = map
+    let sum_of_box_gps = map.sum_of_box_gps();
+    println!("The sum of the GPS coordinates is {}.", sum_of_box_gps);
+
+    let wide_tiles = orig_map
         .tiles
         .iter()
-        .enumerate()
-        .filter_map(|(index, tile)| match tile {
-            Tile::Box => Some((index / map.width * 100) + (index % map.width)),
-            _ => None,
+        .flat_map(|tile| match tile {
+            Tile::Box => [Tile::WideBox(true), Tile::WideBox(false)],
+            Tile::Robot => [Tile::Robot, Tile::Space],
+            t => [*t, *t],
         })
-        .sum::<usize>();
-    println!("The sum of the GPS coordinates is {}.", sum_of_box_gps);
+        .collect::<Vec<_>>();
+    let wide_map = Map {
+        height: orig_map.height,
+        width: orig_map.width * 2,
+        tiles: wide_tiles,
+    };
+    let map = moves
+        .iter()
+        .fold(wide_map.clone(), |map, direction| map.move_robot(direction));
+
+    let sum_of_box_gps = map.sum_of_box_gps();
+    println!(
+        "The sum of the GPS coordinates on the wide map is {}.",
+        sum_of_box_gps
+    );
 }
