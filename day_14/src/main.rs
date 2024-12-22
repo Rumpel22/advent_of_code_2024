@@ -1,13 +1,15 @@
 use std::str::FromStr;
 
-struct XYPair {
-    x: i32,
-    y: i32,
+use bmp::Image;
+
+struct XYPair<T> {
+    x: T,
+    y: T,
 }
 
 struct Robot {
-    position: XYPair,
-    velocity: XYPair,
+    position: XYPair<u32>,
+    velocity: XYPair<i32>,
 }
 
 impl FromStr for Robot {
@@ -32,16 +34,16 @@ impl FromStr for Robot {
     }
 }
 
-fn move_robot(robot: &Robot, room: &XYPair, steps: i32) -> XYPair {
-    let x = robot.position.x + steps * robot.velocity.x;
-    let y = robot.position.y + steps * robot.velocity.y;
+fn move_robot(robot: &Robot, room: &XYPair<u32>, steps: u32) -> XYPair<u32> {
+    let x = robot.position.x as i32 + steps as i32 * robot.velocity.x;
+    let y = robot.position.y as i32 + steps as i32 * robot.velocity.y;
 
-    let x = x.rem_euclid(room.x);
-    let y = y.rem_euclid(room.y);
+    let x = x.rem_euclid(room.x as i32) as u32;
+    let y = y.rem_euclid(room.y as i32) as u32;
     XYPair { x, y }
 }
 
-fn quadrants(positions: &[XYPair], room: &XYPair) -> [usize; 4] {
+fn quadrants(positions: &[XYPair<u32>], room: &XYPair<u32>) -> [usize; 4] {
     let mid_x = room.x / 2;
     let mid_y = room.y / 2;
     let mut top_left = 0;
@@ -59,6 +61,19 @@ fn quadrants(positions: &[XYPair], room: &XYPair) -> [usize; 4] {
         });
 
     [top_left, top_right, bottom_left, bottom_right]
+}
+
+fn show_robots(positions: &[XYPair<u32>], room: &XYPair<u32>, iteration: u32) {
+    let mut image = Image::new(room.x as u32, room.y);
+    for position in positions {
+        image.set_pixel(position.x, position.y, bmp::consts::WHITE);
+    }
+    image
+        .save(format!(
+            "/workspaces/rust/day_14/images/it_{}.bmp",
+            iteration
+        ))
+        .unwrap();
 }
 
 fn main() {
@@ -81,4 +96,12 @@ fn main() {
 
     let safety_factor = per_quadrant.iter().product::<usize>();
     println!("The safety factor after 100 secondes is {}.", safety_factor);
+
+    for iteration in 0..10000 {
+        let moved_robots = robots
+            .iter()
+            .map(|robot| move_robot(robot, &room, iteration))
+            .collect::<Vec<_>>();
+        show_robots(&moved_robots, &room, iteration);
+    }
 }
