@@ -1,4 +1,8 @@
-use std::{collections::HashMap, str::FromStr};
+use std::{
+    collections::{HashMap, HashSet},
+    str::FromStr,
+    usize,
+};
 
 #[derive(PartialEq, Clone, Copy)]
 enum Tile {
@@ -14,43 +18,10 @@ enum Direction {
     West,
 }
 
-enum Turn {
-    Left,
-    Right,
-}
-
-enum Command {
-    Turn(Turn),
-    Walk,
-}
-
 #[derive(Eq, Hash, PartialEq, Clone, Copy)]
 struct State {
     position: XY,
     direction: Direction,
-}
-
-impl Direction {
-    fn rev(&self) -> Self {
-        match self {
-            Direction::North => Direction::South,
-            Direction::East => Direction::West,
-            Direction::South => Direction::North,
-            Direction::West => Direction::East,
-        }
-    }
-    fn turn(&self, turn: &Turn) -> Self {
-        match (self, turn) {
-            (Direction::North, Turn::Left) => Direction::West,
-            (Direction::North, Turn::Right) => Direction::East,
-            (Direction::East, Turn::Left) => Direction::North,
-            (Direction::East, Turn::Right) => Direction::South,
-            (Direction::South, Turn::Left) => Direction::East,
-            (Direction::South, Turn::Right) => Direction::West,
-            (Direction::West, Turn::Left) => Direction::South,
-            (Direction::West, Turn::Right) => Direction::North,
-        }
-    }
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Copy, Debug)]
@@ -139,17 +110,42 @@ impl Iterator for NextStates<'_> {
     type Item = State;
 
     fn next(&mut self) -> Option<Self::Item> {
+        enum Turn {
+            Left,
+            Right,
+        }
+
+        enum Command {
+            Turn(Turn),
+            Walk,
+        }
+
+        impl Turn {
+            fn turn(&self, direction: &Direction) -> Direction {
+                match (direction, self) {
+                    (Direction::North, Turn::Left) => Direction::West,
+                    (Direction::North, Turn::Right) => Direction::East,
+                    (Direction::East, Turn::Left) => Direction::North,
+                    (Direction::East, Turn::Right) => Direction::South,
+                    (Direction::South, Turn::Left) => Direction::East,
+                    (Direction::South, Turn::Right) => Direction::West,
+                    (Direction::West, Turn::Left) => Direction::South,
+                    (Direction::West, Turn::Right) => Direction::North,
+                }
+            }
+        }
+
         while self.count < 3 {
-            self.count += 1;
             let command = match self.count {
-                1 => Command::Walk,
-                2 => Command::Turn(Turn::Left),
-                3 => Command::Turn(Turn::Right),
+                0 => Command::Walk,
+                1 => Command::Turn(Turn::Left),
+                2 => Command::Turn(Turn::Right),
                 _ => unreachable!(),
             };
+            self.count += 1;
             let new_state = match command {
                 Command::Turn(turn) => State {
-                    direction: self.state.direction.turn(&turn),
+                    direction: turn.turn(&self.state.direction),
                     ..self.state
                 },
                 Command::Walk => State {
@@ -181,43 +177,27 @@ impl Maze {
 
 fn h(state: State, end: XY) -> usize {
     let position = &state.position;
-    let direction = state.direction;
     let manhatten = position.x.abs_diff(end.x) + position.y.abs_diff(end.y);
-    let x_turns = match position.x.cmp(&end.x) {
-        std::cmp::Ordering::Less if direction == Direction::East => 0,
-        std::cmp::Ordering::Less if direction == Direction::West => 2,
-        std::cmp::Ordering::Less => 1,
-        std::cmp::Ordering::Equal => 0,
-        std::cmp::Ordering::Greater if direction == Direction::West => 0,
-        std::cmp::Ordering::Greater if direction == Direction::East => 2,
-        std::cmp::Ordering::Greater => 1,
-    };
-    let y_turns = match position.y.cmp(&end.y) {
-        std::cmp::Ordering::Less if direction == Direction::North => 0,
-        std::cmp::Ordering::Less if direction == Direction::South => 2,
-        std::cmp::Ordering::Less => 1,
-        std::cmp::Ordering::Equal => 0,
-        std::cmp::Ordering::Greater if direction == Direction::South => 0,
-        std::cmp::Ordering::Greater if direction == Direction::North => 2,
-        std::cmp::Ordering::Greater => 1,
-    };
-
-    let turns = (x_turns + y_turns).min(2);
-    manhatten + 1000 * turns
+    manhatten
 }
 
-fn reconstruct_path(came_from: &HashMap<State, State>, mut state: State) -> Vec<Direction> {
-    let mut path = vec![state.direction];
-    while let Some(previous) = came_from.get(&state) {
-        path.push(previous.direction);
-        state = *previous;
+fn reconstruct_paths(came_from: &HashMap<State, Vec<State>>, state: State) -> Vec<Vec<XY>> {
+    if let Some(prev_states) = came_from.get(&state) {
+        let mut paths = vec![];
+        for prev_state in prev_states {
+            let mut new_paths = reconstruct_paths(came_from, *prev_state);
+            for new_path in &mut new_paths {
+                new_path.push(state.position);
+            }
+            paths.extend_from_slice(&mut new_paths);
+        }
+        paths
+    } else {
+        vec![vec![state.position]]
     }
-
-    path.reverse();
-    path
 }
 
-fn find_path(maze: &Maze) -> Option<Vec<Direction>> {
+fn find_paths(maze: &Maze) -> Vec<Vec<XY>> {
     let start = State {
         position: maze.start,
         direction: Direction::East,
@@ -226,10 +206,21 @@ fn find_path(maze: &Maze) -> Option<Vec<Direction>> {
     let mut came_from = HashMap::new();
     let mut g_score = HashMap::from([(start, 0)]);
     let mut f_score = HashMap::from([(start, h(start, maze.end))]);
+    let mut winning_score = None;
+    let mut winners = vec![];
 
     while let Some(state) = open_set.pop() {
+        if g_score.get(&state).unwrap() > &winning_score.unwrap_or(usize::MAX) {
+            break;
+        }
+
         if state.position == maze.end {
-            return Some(reconstruct_path(&came_from, state));
+            let score = *g_score.get(&state).unwrap();
+            winning_score.get_or_insert_with(|| {
+                println!("The total cost from start to end is {}.", score);
+                score
+            });
+            winners.push(state);
         }
 
         for new_state in maze.next_states(state) {
@@ -239,31 +230,36 @@ fn find_path(maze: &Maze) -> Option<Vec<Direction>> {
                 } else {
                     1000
                 };
-            if tentative_g_score < *g_score.get(&new_state).unwrap_or(&usize::MAX) {
-                came_from.insert(new_state, state);
-                g_score.insert(new_state, tentative_g_score);
-                f_score.insert(new_state, tentative_g_score + h(new_state, maze.end));
-                if !open_set.contains(&new_state) {
-                    open_set.push(new_state);
-                    open_set.sort_unstable_by_key(|x| f_score.get(x).unwrap());
-                    open_set.reverse();
+            match tentative_g_score.cmp(g_score.get(&new_state).unwrap_or(&usize::MAX)) {
+                std::cmp::Ordering::Less => {
+                    came_from.insert(new_state, vec![state]);
+                    g_score.insert(new_state, tentative_g_score);
+                    f_score.insert(new_state, tentative_g_score + h(new_state, maze.end));
+                    if !open_set.contains(&new_state) {
+                        open_set.push(new_state);
+                    }
                 }
+                std::cmp::Ordering::Equal => came_from.get_mut(&new_state).unwrap().push(state),
+                std::cmp::Ordering::Greater => (),
             }
         }
+        open_set.sort_unstable_by_key(|x| f_score.get(x).unwrap());
+        open_set.reverse();
     }
-    None
-}
-
-fn calc_cost(path: &[Direction]) -> usize {
-    path.windows(2)
-        .map(|a| if a[0] == a[1] { 1 } else { 1000 })
-        .sum()
+    winners
+        .iter()
+        .flat_map(|winner| reconstruct_paths(&came_from, *winner))
+        .collect::<Vec<_>>()
 }
 
 fn main() {
     let input = include_str!("../input/input.txt");
     let maze = Maze::from_str(&input).unwrap();
-    let path = find_path(&maze).unwrap();
-    let costs = calc_cost(&path);
-    println!("The total cost from start to end is {}.", costs);
+    let paths = find_paths(&maze);
+    println!(
+        "There are {} different paths through the maze.",
+        paths.len()
+    );
+    let best_tiles = paths.iter().flatten().collect::<HashSet<_>>();
+    println!("There are {} best tiles on these paths.", best_tiles.len());
 }
