@@ -2,45 +2,49 @@
 
 use std::ops::BitXorAssign;
 
+#[derive(Clone, Copy)]
 struct Registers {
-    A: u32,
-    B: u32,
-    C: u32,
+    A: u64,
+    B: u64,
+    C: u64,
 }
 
+#[derive(Debug)]
 enum Register {
     A,
     B,
     C,
 }
 
+#[derive(Debug)]
 enum Combo {
-    Literal(u32),
+    Literal(u64),
     Register(Register),
 }
 
+#[derive(Debug)]
 enum OpCode {
     adv(Combo),
-    bxl(u32),
+    bxl(u64),
     bst(Combo),
-    jnz(u32),
+    jnz(u64),
     bxc,
     out(Combo),
     bdv(Combo),
     cdv(Combo),
 }
 
-fn parse_register(line: &str) -> u32 {
-    line[12..].parse::<u32>().unwrap()
+fn parse_register(line: &str) -> u64 {
+    line[12..].parse::<u64>().unwrap()
 }
 
 fn parse_program(line: &str) -> Vec<OpCode> {
     let numbers = line[9..]
         .split(',')
-        .map(|c| c.parse::<u32>().unwrap())
+        .map(|c| c.parse::<u64>().unwrap())
         .collect::<Vec<_>>();
 
-    let combo = |number: u32| match number {
+    let combo = |number: u64| match number {
         0..=3 => Combo::Literal(number),
         4 => Combo::Register(Register::A),
         5 => Combo::Register(Register::B),
@@ -64,7 +68,7 @@ fn parse_program(line: &str) -> Vec<OpCode> {
         .collect()
 }
 
-fn combo_value(combo: &Combo, regs: &Registers) -> u32 {
+fn combo_value(combo: &Combo, regs: &Registers) -> u64 {
     let value = match combo {
         Combo::Literal(x) => x,
         Combo::Register(register) => &match register {
@@ -76,7 +80,7 @@ fn combo_value(combo: &Combo, regs: &Registers) -> u32 {
     *value
 }
 
-fn execute_program(program: &[OpCode], mut regs: Registers) -> String {
+fn execute_program(program: &[OpCode], regs: &mut Registers) -> String {
     let mut ip = 0;
     let mut outputs = vec![];
     loop {
@@ -87,8 +91,8 @@ fn execute_program(program: &[OpCode], mut regs: Registers) -> String {
 
         match op_code {
             OpCode::adv(combo) => {
-                let denominator = combo_value(combo, &regs);
-                let v = regs.A / 2u32.pow(denominator);
+                let denominator = combo_value(combo, &regs) as u32;
+                let v = regs.A / 2u64.pow(denominator);
                 regs.A = v;
             }
             OpCode::bxl(literal) => {
@@ -111,13 +115,13 @@ fn execute_program(program: &[OpCode], mut regs: Registers) -> String {
                 outputs.push(value.to_string());
             }
             OpCode::bdv(combo) => {
-                let denominator = combo_value(combo, &regs);
-                let v = regs.A / 2u32.pow(denominator);
+                let denominator = combo_value(combo, &regs) as u32;
+                let v = regs.A / 2u64.pow(denominator);
                 regs.B = v;
             }
             OpCode::cdv(combo) => {
-                let denominator = combo_value(combo, &regs);
-                let v = regs.A / 2u32.pow(denominator);
+                let denominator = combo_value(combo, &regs) as u32;
+                let v = regs.A / 2u64.pow(denominator);
                 regs.C = v;
             }
         }
@@ -131,15 +135,107 @@ fn execute_program(program: &[OpCode], mut regs: Registers) -> String {
     outputs.join(",")
 }
 
-fn main() {
-    let input = include_str!("../input/demo.txt");
+fn find_a(program: &[OpCode], orig_regs: &Registers, program_code: &str) -> u64 {
+    let mut a = 0;
+    for _ in 0..(2 * program.len()) {
+        a *= 8;
+
+        let mut j = 0;
+        let i = loop {
+            let i = j;
+            j += 1;
+            let mut regs = Registers {
+                A: a + i,
+                ..*orig_regs
+            };
+            let output = execute_program(&program, &mut regs);
+            if program_code.ends_with(&output) {
+                break i;
+            }
+        };
+        a += i;
+    }
+    a
+}
+
+fn parse_input(input: &str) -> (Registers, Vec<OpCode>) {
     let mut lines = input.lines();
     let A = lines.next().map(parse_register).unwrap();
     let B = lines.next().map(parse_register).unwrap();
     let C = lines.next().map(parse_register).unwrap();
     let regs = Registers { A, B, C };
     let program = lines.skip(1).next().map(parse_program).unwrap();
+    (regs, program)
+}
 
-    let output = execute_program(&program, regs);
+fn main() {
+    let input = include_str!("../input/input.txt");
+
+    let (orig_regs, program) = parse_input(input);
+
+    let mut regs = orig_regs;
+    let output = execute_program(&program, &mut regs);
     println!("The program prints:\n{}", output);
+
+    let program_code = &input.lines().skip(4).next().unwrap()[9..];
+    println!("\nThe program itself: {}", program_code);
+
+    let a = find_a(&program, &regs, program_code);
+    println!("The program outputs itself if register A is set to {}.", a);
+    let mut regs = Registers { A: a, ..orig_regs };
+    println!("{}", execute_program(&program, &mut regs))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_1() {
+        let program = parse_program("Program: 2,6");
+        let mut regs = Registers { A: 0, B: 0, C: 1 };
+        execute_program(&program, &mut regs);
+        assert_eq!(1, regs.B)
+    }
+
+    #[test]
+    fn test_2() {
+        let program = parse_program("Program: 5,0,5,1,5,4");
+        let mut regs = Registers { A: 10, B: 0, C: 0 };
+        let output = execute_program(&program, &mut regs);
+        assert_eq!("0,1,2", output);
+    }
+
+    #[test]
+    fn test_3() {
+        let program = parse_program("Program: 0,1,5,4,3,0");
+        let mut regs = Registers {
+            A: 2024,
+            B: 0,
+            C: 0,
+        };
+        let output = execute_program(&program, &mut regs);
+        assert_eq!("4,2,5,6,7,7,7,7,3,1,0", output);
+        assert_eq!(0, regs.A);
+    }
+
+    #[test]
+    fn test_4() {
+        let program = parse_program("Program: 1,7");
+        let mut regs = Registers { A: 0, B: 29, C: 0 };
+        execute_program(&program, &mut regs);
+        assert_eq!(26, regs.B);
+    }
+
+    #[test]
+    fn test_5() {
+        let program = parse_program("Program: 4,0");
+        let mut regs = Registers {
+            A: 0,
+            B: 2024,
+            C: 43690,
+        };
+        execute_program(&program, &mut regs);
+        assert_eq!(44354, regs.B);
+    }
 }
