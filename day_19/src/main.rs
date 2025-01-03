@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 type Towel<'a> = &'a str;
 type Pattern<'a> = &'a str;
 type Towels<'a> = Vec<Towel<'a>>;
@@ -15,7 +17,7 @@ fn parse_input(input: &str) -> (Towels, Patterns) {
     (towels, patterns)
 }
 
-fn is_valid_pattern(pattern: &Pattern, towels: &Towels) -> bool {
+fn is_pattern_possible(pattern: &Pattern, towels: &Towels) -> bool {
     if pattern.is_empty() {
         return true;
     }
@@ -23,16 +25,50 @@ fn is_valid_pattern(pattern: &Pattern, towels: &Towels) -> bool {
     towels
         .iter()
         .filter(|towel| pattern.starts_with(*towel))
-        .any(|towel| is_valid_pattern(&&pattern[towel.len()..], towels))
+        .any(|towel| is_pattern_possible(&&pattern[towel.len()..], towels))
+}
+
+fn valid_patterns<'a>(
+    pattern: &Pattern<'a>,
+    towels: &'a Towels<'a>,
+    cache: &mut HashMap<&'a str, usize>,
+) -> usize {
+    if pattern.is_empty() {
+        return 1;
+    }
+
+    if let Some(cached_value) = cache.get(pattern) {
+        return *cached_value;
+    }
+
+    let mut value = 0;
+    for towel in towels {
+        if pattern.starts_with(towel) {
+            value += valid_patterns(&&pattern[towel.len()..], towels, cache);
+        }
+    }
+    cache.insert(&pattern, value);
+    value
 }
 
 fn main() {
     let input = include_str!("../input/input.txt");
     let (towels, patterns) = parse_input(input);
 
-    let valid_patterns = patterns
+    let possible_patterns = patterns
         .iter()
-        .filter(|pattern| is_valid_pattern(pattern, &towels))
+        .filter(|pattern| is_pattern_possible(pattern, &towels))
         .collect::<Vec<_>>();
-    println!("There are {} valid patterns.", valid_patterns.len());
+    println!("There are {} valid patterns.", possible_patterns.len());
+
+    let mut cache = HashMap::new();
+
+    let different_patterns = patterns
+        .iter()
+        .map(|pattern| valid_patterns(pattern, &towels, &mut cache))
+        .sum::<usize>();
+    println!(
+        "There are {} different patterns possible.",
+        different_patterns
+    );
 }
