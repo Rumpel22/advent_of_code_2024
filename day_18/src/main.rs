@@ -128,6 +128,28 @@ fn find_path(map: &Map) -> Option<Vec<XY>> {
     None
 }
 
+fn is_path(map: &Map) -> bool {
+    let start = XY { x: 0, y: 0 };
+    let end = XY {
+        x: map.width - 1,
+        y: map.height - 1,
+    };
+    let mut visited = vec![start];
+    let mut nexts = vec![start];
+    while let Some(next) = nexts.pop() {
+        if next == end {
+            return true;
+        }
+        visited.push(next);
+        for neighbor in map.neighbors(&next) {
+            if !visited.contains(&neighbor) && !nexts.contains(&neighbor) {
+                nexts.push(neighbor);
+            }
+        }
+    }
+    false
+}
+
 fn main() {
     let input = include_str!("../input/input.txt");
     let bytes = parse_input(input);
@@ -143,7 +165,7 @@ fn main() {
 
     for byte in &bytes[nb_bytes..] {
         map.corrupted.push(*byte);
-        if find_path(&map).is_none() {
+        if !is_path(&map) {
             println!("After byte {}, the end is not reachable anymore.", byte);
             break;
         }
