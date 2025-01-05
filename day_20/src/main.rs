@@ -1,4 +1,4 @@
-use std::{collections::HashMap, iter, str::FromStr};
+use std::{collections::HashMap, iter, ops::RangeInclusive, str::FromStr};
 
 #[derive(PartialEq)]
 enum Tile {
@@ -167,6 +167,42 @@ fn main() {
         .count();
     println!(
         "There are {} cheats through the walls for at least 100ps.",
+        cheat_count
+    );
+
+    let cheat_count = path
+        .iter()
+        .take_while(|tile| distances.get(tile).unwrap() >= &min_save)
+        .flat_map(|tile| {
+            let x_range: RangeInclusive<i32> = -20..=20;
+
+            x_range
+                .flat_map(|x_offset| {
+                    let y_limit = 20 - x_offset.abs();
+                    let y_range = -y_limit..=y_limit;
+                    y_range.map(move |y_offset| (x_offset, y_offset))
+                })
+                .filter_map(|(x_offset, y_offset)| {
+                    let x = (x_offset + tile.x as i32).clamp(0, i32::MAX) as usize;
+                    let y = (y_offset + tile.y as i32).clamp(0, i32::MAX) as usize;
+                    let cheat = XY { x, y };
+
+                    if maze.get(&cheat) == Some(&Tile::Track) {
+                        let tile_distance = *distances.get(tile).unwrap();
+                        let cheat_distance = *distances.get(&cheat).unwrap();
+
+                        let cheated = x_offset.abs() + y_offset.abs();
+                        if cheat_distance < tile_distance {
+                            return Some(tile_distance - cheat_distance - cheated as usize);
+                        }
+                    }
+                    None
+                })
+        })
+        .filter(|size| *size >= min_save)
+        .count();
+    println!(
+        "If real cheating is allowed, there are {} cheats for at least 100ps.",
         cheat_count
     );
 }
