@@ -1,14 +1,14 @@
-use std::{fmt::Debug, iter, marker::PhantomData};
+use std::{collections::HashMap, fmt::Debug, hash::Hash, iter};
 
 use itertools::Itertools;
 
-#[derive(PartialEq, Clone, Copy, Debug)]
+#[derive(PartialEq, Clone, Copy, Debug, Eq, Hash)]
 enum NumericKeypadButton {
     Digit(u8),
     Activate,
 }
 
-#[derive(PartialEq, Clone, Copy, Debug)]
+#[derive(PartialEq, Clone, Copy, Debug, Eq, Hash)]
 enum Command {
     Up,
     Down,
@@ -17,7 +17,7 @@ enum Command {
     A,
 }
 
-trait Button: PartialEq + Copy + Debug {
+trait Button: PartialEq + Copy + Debug + Eq + Hash {
     fn go(&self, command: &Command) -> Option<Self>
     where
         Self: Sized;
@@ -139,7 +139,7 @@ where
     B: Button,
 {
     next: K,
-    p: PhantomData<B>,
+    cache: HashMap<(B, B), usize>,
 }
 
 fn next<K: Keypad, B: Button>(n: K) -> IndirectInput<K, B>
@@ -148,7 +148,7 @@ where
 {
     IndirectInput::<K, B> {
         next: n,
-        p: PhantomData::default(),
+        cache: HashMap::default(),
     }
 }
 
@@ -163,10 +163,11 @@ where
             .map(|x| {
                 let from = x.0;
                 let to = x.1;
-
-                let paths = from_to(from, to);
-                let y = paths.iter().map(|path| self.next.cost(path)).min().unwrap();
-                y
+                *self.cache.entry((*from, *to)).or_insert_with(|| {
+                    let paths = from_to(from, to);
+                    let y = paths.iter().map(|path| self.next.cost(path)).min().unwrap();
+                    y
+                })
             })
             .sum()
     }
@@ -198,7 +199,11 @@ fn main() {
     let input = include_str!("../input/input.txt");
     let codes = input.lines().map(parse_code).collect::<Vec<_>>();
 
-    let mut numeric_keypad = next(next(next(DirectInput {})));
+    let mut numeric_keypad = next(next(next(next(next(next(next(next(next(next(next(
+        next(next(next(next(next(next(next(next(next(next(next(
+            next(next(next(next(DirectInput {})))),
+        ))))))))))),
+    )))))))))));
 
     let x = codes
         .iter()
