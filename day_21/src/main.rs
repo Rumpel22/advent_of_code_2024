@@ -1,4 +1,4 @@
-use std::{fmt::Debug, iter};
+use std::{fmt::Debug, iter, marker::PhantomData};
 
 use itertools::Itertools;
 
@@ -118,37 +118,60 @@ fn from_to<T: Button>(from: &T, to: &T) -> Vec<Vec<Command>> {
 }
 
 trait Keypad {
-    fn cost<T: Button>(&self, path: &[T]) -> usize;
+    type ButtonT: Button;
+
+    fn cost(&mut self, path: &[Self::ButtonT]) -> usize;
 }
 
 struct DirectInput;
 
 impl Keypad for DirectInput {
-    fn cost<T: Button>(&self, path: &[T]) -> usize {
+    type ButtonT = Command;
+
+    fn cost(&mut self, path: &[Self::ButtonT]) -> usize {
         path.len()
     }
 }
 
-struct IndirectInput<T>
+struct IndirectInput<K, B>
 where
-    T: Keypad,
+    K: Keypad,
+    B: Button,
 {
-    next: T,
+    next: K,
+    p: PhantomData<B>,
 }
 
-impl<K: Keypad> Keypad for IndirectInput<K> {
-    fn cost<T: Button>(&self, path: &[T]) -> usize {
-        iter::once(&T::start())
+fn next<K: Keypad, B: Button>(n: K) -> IndirectInput<K, B>
+where
+    K: Keypad<ButtonT = Command>,
+{
+    IndirectInput::<K, B> {
+        next: n,
+        p: PhantomData::default(),
+    }
+}
+
+impl<K: Keypad, B: Button> Keypad for IndirectInput<K, B>
+where
+    K: Keypad<ButtonT = Command>,
+{
+    fn cost(&mut self, path: &[B]) -> usize {
+        iter::once(&Self::ButtonT::start())
             .chain(path.iter())
             .tuple_windows::<(_, _)>()
             .map(|x| {
                 let from = x.0;
                 let to = x.1;
+
                 let paths = from_to(from, to);
-                paths.iter().map(|path| self.next.cost(path)).min().unwrap()
+                let y = paths.iter().map(|path| self.next.cost(path)).min().unwrap();
+                y
             })
             .sum()
     }
+
+    type ButtonT = B;
 }
 
 fn numeric_part(code: &[NumericKeypadButton]) -> usize {
@@ -175,13 +198,7 @@ fn main() {
     let input = include_str!("../input/input.txt");
     let codes = input.lines().map(parse_code).collect::<Vec<_>>();
 
-    let numeric_keypad = IndirectInput {
-        next: IndirectInput {
-            next: IndirectInput {
-                next: DirectInput {},
-            },
-        },
-    };
+    let mut numeric_keypad = next(next(next(DirectInput {})));
 
     let x = codes
         .iter()
