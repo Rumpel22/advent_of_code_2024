@@ -4,4 +4,5 @@
         "**/lib/rustlib/src/rust/library/**/*.rs": true,
     },
     "editor.formatOnSave": true,
+    "debug.terminal.clearBeforeReusing": true,
 }
