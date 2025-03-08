@@ -1,11 +1,27 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
+
+trait Operation {
+    fn exec(&self, b1: bool, b2: bool) -> bool;
+}
+
+enum Op {
+    And,
+    Or,
+    Xor,
+}
+
+impl Operation for Op {
+    fn exec(&self, b1: bool, b2: bool) -> bool {
+        match self {
+            Op::And => b1 & b2,
+            Op::Or => b1 | b2,
+            Op::Xor => b1 ^ b2,
+        }
+    }
+}
 
 enum Wire {
-    Gate {
-    i1: String,
-    i2: String,
-    op: Box<dyn Fn(bool, bool) -> bool>,
-    },
+    Gate { i1: String, i2: String, op: Op },
     Value(bool),
 }
 
@@ -19,22 +35,18 @@ fn parse(input: &str) -> HashMap<String, Wire> {
     });
 
     let gates = gates_input.lines().map(|line| {
-            let mut parts = line.split(' ');
-            let i1 = parts.next().unwrap().to_string();
-            let op = match parts.next().unwrap() {
-                "AND" => |a: bool, b: bool| a & b,
-                "OR" => |a: bool, b: bool| a | b,
-                "XOR" => |a: bool, b: bool| a ^ b,
-                _ => unreachable!(),
-            };
-            let i2 = parts.next().unwrap().to_string();
-            parts.next();
-            let o = parts.next().unwrap().to_string();
-        let gate = Wire::Gate {
-                i1,
-                i2,
-                op: Box::new(op),
+        let mut parts = line.split(' ');
+        let i1 = parts.next().unwrap().to_string();
+        let op = match parts.next().unwrap() {
+            "AND" => Op::And,
+            "OR" => Op::Or,
+            "XOR" => Op::Xor,
+            _ => unreachable!(),
         };
+        let i2 = parts.next().unwrap().to_string();
+        parts.next();
+        let o = parts.next().unwrap().to_string();
+        let gate = Wire::Gate { i1, i2, op };
         (o, gate)
     });
     values.chain(gates).collect()
@@ -42,7 +54,7 @@ fn parse(input: &str) -> HashMap<String, Wire> {
 
 fn resolve(name: &str, wires: &HashMap<String, Wire>) -> bool {
     match wires.get(name).unwrap() {
-        Wire::Gate { i1, i2, op } => op(resolve(i1, wires), resolve(i2, wires)),
+        Wire::Gate { i1, i2, op } => op.exec(resolve(i1, wires), resolve(i2, wires)),
         Wire::Value(value) => *value,
     }
 }
@@ -56,21 +68,36 @@ fn z_resolve(wires: &HashMap<String, Wire>) -> u64 {
         .fold(0, |total, (index, value)| total + (value << index))
 }
 
-fn get_number(wires: &Wires) -> u64 {
-    let mut z_values = wires
-        .iter()
-        .filter(|(name, _)| name.starts_with('z'))
-        .collect::<Vec<_>>();
-    z_values.sort_by_key(|(name, _)| *name);
-    z_values.reverse();
-    let number = z_values.iter().fold(0_u64, |v, (_, state)| {
-        (v << 1)
-            + match state.unwrap() {
-                true => 1,
-                false => 0,
+fn print_dot_script(wires: &HashMap<String, Wire>) {
+    println!("digraph {}", '{');
+    for (name, wire) in wires {
+        let op = match wire {
+            Wire::Gate { i1, i2, op } => {
+                println!("{} -> {};\n{} -> {};", i1, name, i2, name);
+                Some(op)
+            }
+            Wire::Value(_) => None,
+        };
+        let op_string = match op {
+            Some(Op::And) => "shape=rect",
+            Some(Op::Or) => "shape=diamond",
+            Some(Op::Xor) => "shape=star",
+            None => "",
+        };
+        match name.chars().nth(0).unwrap() {
+            'x' => println!(
+                "{} [color=lightblue,style=filled,group=x,{}];",
+                name, op_string
+            ),
+            'y' => println!(
+                "{} [color=lightgreen,style=filled,group=y,{}];",
+                name, op_string
+            ),
+            'z' => println!("{} [color=red,style=filled,group=z,{}];", name, op_string),
+            _ => println!("{} [{}];", name, op_string),
+        }
     }
-    });
-    number
+    println!("{}", '}');
 }
 
 fn main() {
@@ -78,4 +105,12 @@ fn main() {
     let wires = parse(input);
     let z_value = z_resolve(&wires);
     println!("The produces number is {}.", z_value);
+
+    // Solution was solved visually:
+    // The created dot-script is executed and the image is analysed.
+    // - All z-fields (except the last) must be an XOR
+    // - Every irregularity indicates a mismatch. Other gate is in proximity.
+    // Sorting the affected gates is easy done manually.
+    // The solution for the input is "gqp,hsw,jmh,mwk,qgd,z10,z18,z33"
+    print_dot_script(&wires);
 }
