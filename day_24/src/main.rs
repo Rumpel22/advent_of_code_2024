@@ -1,33 +1,24 @@
-use std::{collections::HashMap, ops::BitXor};
+use std::collections::{HashMap, HashSet};
 
-type State = bool;
-type Wires = HashMap<String, Option<State>>;
-
-struct Gate {
+enum Wire {
+    Gate {
     i1: String,
     i2: String,
-    o: String,
     op: Box<dyn Fn(bool, bool) -> bool>,
+    },
+    Value(bool),
 }
-type Gates = Vec<Gate>;
 
-fn wires(input: &str) -> (Wires, Gates) {
-    let (i1, i2) = input.split_once("\n\n").unwrap();
+fn parse(input: &str) -> HashMap<String, Wire> {
+    let (values_input, gates_input) = input.split_once("\n\n").unwrap();
 
-    let mut wires = i1
-        .lines()
-        .map(|line| {
-            let (name, state) = line.split_once(": ").unwrap();
-            (
-                name.to_string(),
-                Some(if state == "1" { true } else { false }),
-            )
-        })
-        .collect::<HashMap<_, _>>();
+    let values = values_input.lines().map(|line| {
+        let (name, value) = line.split_once(": ").unwrap();
+        let value = value == "1";
+        (name.to_string(), Wire::Value(value))
+    });
 
-    let gates = i2
-        .lines()
-        .map(|line| {
+    let gates = gates_input.lines().map(|line| {
             let mut parts = line.split(' ');
             let i1 = parts.next().unwrap().to_string();
             let op = match parts.next().unwrap() {
@@ -39,23 +30,30 @@ fn wires(input: &str) -> (Wires, Gates) {
             let i2 = parts.next().unwrap().to_string();
             parts.next();
             let o = parts.next().unwrap().to_string();
-            Gate {
+        let gate = Wire::Gate {
                 i1,
                 i2,
-                o,
                 op: Box::new(op),
-            }
-        })
-        .collect::<Vec<_>>();
-    gates
-        .iter()
-        .flat_map(|gate| [&gate.i1, &gate.i2, &gate.o])
-        .for_each(|wire| {
-            if !wires.contains_key(wire) {
-                wires.insert(wire.to_string(), None);
-            }
-        });
-    (wires, gates)
+        };
+        (o, gate)
+    });
+    values.chain(gates).collect()
+}
+
+fn resolve(name: &str, wires: &HashMap<String, Wire>) -> bool {
+    match wires.get(name).unwrap() {
+        Wire::Gate { i1, i2, op } => op(resolve(i1, wires), resolve(i2, wires)),
+        Wire::Value(value) => *value,
+    }
+}
+
+fn z_resolve(wires: &HashMap<String, Wire>) -> u64 {
+    (0..)
+        .map(|index| format!("z{:02}", index))
+        .take_while(|name| wires.contains_key(name))
+        .map(|name| if resolve(&name, wires) { 1 } else { 0 })
+        .enumerate()
+        .fold(0, |total, (index, value)| total + (value << index))
 }
 
 fn get_number(wires: &Wires) -> u64 {
@@ -70,29 +68,14 @@ fn get_number(wires: &Wires) -> u64 {
             + match state.unwrap() {
                 true => 1,
                 false => 0,
-            }
+    }
     });
     number
 }
 
 fn main() {
     let input = include_str!("../input/input.txt");
-    let (mut wires, gates) = wires(input);
-    while wires.values().any(|state| state.is_none()) {
-        let next_gate = gates
-            .iter()
-            .filter(|gate| {
-                wires.get(&gate.i1).unwrap().is_some()
-                    && wires.get(&gate.i2).unwrap().is_some()
-                    && wires.get(&gate.o).unwrap().is_none()
-            })
-            .next()
-            .unwrap();
-        let i1 = wires.get(&next_gate.i1).unwrap().unwrap();
-        let i2 = wires.get(&next_gate.i2).unwrap().unwrap();
-        let new_state = (next_gate.op)(i1, i2);
-        wires.insert(next_gate.o.clone(), Some(new_state));
-    }
-    let number = get_number(&wires);
-    println!("The produces number is {}.", number);
+    let wires = parse(input);
+    let z_value = z_resolve(&wires);
+    println!("The produces number is {}.", z_value);
 }
